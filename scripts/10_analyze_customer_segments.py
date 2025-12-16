@@ -1,3 +1,20 @@
+"""
+10_analyze_customer_segments.py - Analyze Fact Metrics by Customer Segments
+
+Perform customer segmentation analysis of fact_policy_snapshot aggregating premium
+and policies by customer segment dimension.
+
+Analysis output:
+  - Total Premium by Customer Segment (descending order)
+  - Total Policies by Customer Segment
+  - Identifies high-value and low-value customer segments
+
+Join: Fact table → Customer Dimension (on customer_key)
+
+Output: Console table showing metrics ranked by premium contribution
+
+Dependencies: PySpark, config
+"""
 import sys
 import os
 

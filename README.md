@@ -37,16 +37,18 @@ This pipeline processes insurance contract, vehicle, claims, and telematics data
 ```
 Raw Data (CSV)
      ↓
-[01_ingestion.py] → Staged Data (Parquet)
+[01_ingest_csv_to_parquet.py] → Staged Data (Parquet)
      ↓
-[02_cleaning_validation.py] → Cleaned Data (Parquet)
+[02_clean_contracts_data.py] + [03_clean_multisource_data.py] → Cleaned Data
      ↓
-[03_load_dimensions.py] ┐
-                        ├→ PostgreSQL Data Warehouse
-[04_load_facts.py]      ┘
+[04_load_dimension_tables.py]
+[05_load_fact_tables.py]       ├→ PostgreSQL Data Warehouse
+[07_load_fact_claims.py]       
+[08_load_driver_risk_scores.py]
      ↓
-[05_analyze_fact.py] → Analytics by Year/Month
-[06_analyze_customer.py] → Analytics by Customer Segment
+[06_validate_data_quality.py] → QA Report
+[09_analyze_fact_metrics.py] → Time-Series Analytics
+[10_analyze_customer_segments.py] → Segment Analytics
 ```
 
 ### Data Layers
@@ -164,45 +166,32 @@ data/raw/
 
 ## 📊 Pipeline Execution
 
-### Run the Entire Pipeline
+### Sequential Execution Order
 
 ```bash
 cd scripts
-python 01_ingestion.py
-python 02_cleaning_validation.py
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 03_load_dimensions.py
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 04_load_facts.py
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 05_analyze_fact.py
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 06_analyze_customer.py
+
+# Stage 1: Ingestion & Cleaning
+python 01_ingest_csv_to_parquet.py
+python 02_clean_contracts_data.py
+python 03_clean_multisource_data.py
+
+# Stage 2: Dimensional Loading (requires JDBC JAR and PostgreSQL)
+spark-submit --jars "C:/Program Files/PostgreSQL/18/jdbc/postgresql-42.7.8.jar" 04_load_dimension_tables.py
+spark-submit --jars "C:/Program Files/PostgreSQL/18/jdbc/postgresql-42.7.8.jar" 05_load_fact_tables.py
+spark-submit --jars "C:/Program Files/PostgreSQL/18/jdbc/postgresql-42.7.8.jar" 06_validate_data_quality.py
+spark-submit --jars "C:/Program Files/PostgreSQL/18/jdbc/postgresql-42.7.8.jar" 07_load_fact_claims.py
+spark-submit --jars "C:/Program Files/PostgreSQL/18/jdbc/postgresql-42.7.8.jar" 08_load_driver_risk_scores.py
+
+# Stage 3: Analysis
+spark-submit --jars "C:/Program Files/PostgreSQL/18/jdbc/postgresql-42.7.8.jar" 09_analyze_fact_metrics.py
+spark-submit --jars "C:/Program Files/PostgreSQL/18/jdbc/postgresql-42.7.8.jar" 10_analyze_customer_segments.py
+
+# Stage 4: Cleanup
+spark-submit --jars "C:/Program Files/PostgreSQL/18/jdbc/postgresql-42.7.8.jar" 11_cleanup_spark_session.py
 ```
 
-### Run Individual Steps
-
-Each script can be executed independently:
-
-```bash
-# Stage raw data
-python 01_ingestion.py
-
-# Clean and validate
-python 02_cleaning_validation.py
-
-# Load dimensions only
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 03_load_dimensions.py
-
-# Load facts only
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 04_load_facts.py
-
-# Generate analytics
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 05_analyze_fact.py
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 06_analyze_customer.py
-```
-
-### Stop Spark Session (if needed)
-
-```bash
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 07_stop_spark.py
-```
+**Note**: Environment variables (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD) must be set in `.env` file.
 
 ---
 
@@ -211,155 +200,73 @@ spark-submit --jars "path/to/postgresql-42.7.8.jar" 07_stop_spark.py
 ```
 car-insurance-data-pipeline/
 ├── data/
-│   ├── raw/                          # Original CSV files
-│   ├── staged/                       # Parquet-formatted, ready for processing
-│   └── cleaned/                      # Cleaned, validated Parquet files
+│   ├── raw/                              # Original CSV files
+│   ├── staged/                           # Parquet-formatted, ready for processing
+│   └── cleaned/                          # Cleaned, validated Parquet files
 ├── scripts/
-│   ├── 01_ingestion.py              # Read CSVs, stage as Parquet
-│   ├── 02_cleaning_validation.py    # Clean, validate, enforce schema
-│   ├── 03_load_dimensions.py        # Load dimension tables
-│   ├── 04_load_facts.py             # Load fact table
-│   ├── 05_analyze_fact.py           # Analyze by time period
-│   ├── 06_analyze_customer.py       # Analyze by customer segment
-│   └── 07_stop_spark.py             # Cleanup Spark resources
-├── sql/
-│   └── create_dw_schema.sql         # Data warehouse schema definition
-├── config.py                         # Centralized configuration
-├── requirements.txt                  # Python dependencies
-├── .env                              # Environment variables (DO NOT commit)
-├── .env.example                      # Template for .env
-├── .gitignore                        # Git ignore rules
-└── README.md                         # This file
+│   ├── 01_ingest_csv_to_parquet.py      # Read CSVs, stage as Parquet
+│   ├── 02_clean_contracts_data.py       # Clean and validate contracts
+│   ├── 03_clean_multisource_data.py     # Clean vehicles, claims, telematics
+│   ├── 04_load_dimension_tables.py      # Load dimensions (customer, policy, date)
+│   ├── 05_load_fact_tables.py           # Load fact_policy_snapshot
+│   ├── 06_validate_data_quality.py      # Data quality validation
+│   ├── 07_load_fact_claims.py           # Load fact_claims
+│   ├── 08_load_driver_risk_scores.py    # Calculate and load driver risk scores
+│   ├── 09_analyze_fact_metrics.py       # Analyze by time period
+│   ├── 10_analyze_customer_segments.py  # Analyze by customer segment
+│   └── 11_cleanup_spark_session.py      # Cleanup Spark resources
+├── config.py                             # Centralized configuration (database, paths, JDBC)
+├── requirements.txt                      # Python dependencies
+├── .env                                  # Environment variables (DO NOT commit)
+├── .env.example                          # Template for .env
+├── .gitignore                            # Git ignore rules
+├── COMMENTS_ANALYSIS.md                  # Code quality documentation
+└── README.md                             # This file
 ```
 
 ---
 
 ## 📜 Scripts Overview
 
-### 01_ingestion.py
-**Purpose**: Extract raw CSV data and stage as Parquet
+### 01_ingest_csv_to_parquet.py
+**Reads** raw CSV files → **Outputs** Parquet files in `data/staged/`  
+Removes completely empty rows and normalizes format.
 
-**Inputs**: `data/raw/*.csv`  
-**Outputs**: `data/staged/*.parquet`  
-**Processing**:
-- Read CSV files with Pandas
-- Remove completely empty rows
-- Convert to Parquet format for efficient processing
+### 02_clean_contracts_data.py
+**Reads** `contracts.parquet` → **Outputs** `contracts_clean.parquet`  
+Splits names, parses dates (MM/dd/yyyy & yyyy-MM-dd), removes currency, enforces schema.
 
-**Key Features**:
-- Handles large files with `low_memory=False`
-- Validates file existence
-- Reports row counts before/after cleaning
+### 03_clean_multisource_data.py
+**Reads** vehicles, claims, telematics Parquet → **Outputs** cleaned Parquet files  
+Vehicles: Parse HP, remove €. Claims: Handle date formats. Telematics: Convert Unix timestamps, parse GPS.
 
----
+### 04_load_dimension_tables.py
+**Loads** dim_customer, dim_policy, dim_date to PostgreSQL  
+Deduplicates by natural key, generates surrogate keys.
 
-### 02_cleaning_validation.py
-**Purpose**: Clean, validate, and enforce schema on staged data using PySpark
+### 05_load_fact_tables.py
+**Loads** fact_policy_snapshot to PostgreSQL  
+Joins cleaned contracts with dimensions, creates measures (policy_count, total_premium).
 
-**Inputs**: `data/staged/contracts.parquet`  
-**Outputs**: `data/cleaned/contracts_clean.parquet`  
-**Processing**:
-- Remove currency symbols (€) from premiums
-- Handle multiple date formats (MM/dd/yyyy and yyyy-MM-dd)
-- Split client names into first/last names
-- Cast to proper data types (Integer, Double, Date)
-- Handle invalid data (nulls, negatives) with business logic
-- Partition output by contract status
+### 06_validate_data_quality.py
+**Validates** fact_policy_snapshot: record counts, NULLs in keys, premium statistics.
 
-**Key Features**:
-- PySpark distributed processing
-- Schema inference and explicit casting
-- Data quality checks for premiums
-- Comprehensive error handling
+### 07_load_fact_claims.py
+**Loads** fact_claims to PostgreSQL  
+Joins claims with fact_policy_snapshot and dim_date.
 
----
+### 08_load_driver_risk_scores.py
+**Loads** fact_driver_risk to PostgreSQL  
+Calculates Haversine distance, speeds, and risk scores from telematics GPS data.
 
-### 03_load_dimensions.py
-**Purpose**: Extract and load dimension tables to PostgreSQL
+### 09_analyze_fact_metrics.py
+**Aggregates** premium and policies by year/month.
 
-**Dimension Tables**:
-1. **dim_customer**: Customer attributes (age, gender, segment, location)
-2. **dim_policy**: Policy attributes (product, channel, status, risk zone)
-3. **dim_date**: Calendar dimension (year, month, day_of_week, is_weekend)
+### 10_analyze_customer_segments.py
+**Aggregates** premium and policies by customer segment.
 
-**Processing**:
-- Deduplicates records by natural key
-- Generates surrogate keys for efficiency
-- Uses JDBC to write to PostgreSQL
-
-**Run Command**:
-```bash
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 03_load_dimensions.py
-```
-
----
-
-### 04_load_facts.py
-**Purpose**: Build fact table by joining dimensions and measures
-
-**Fact Table**: `fact_policy_snapshot`
-
-**Measures**:
-- `policy_count`: Always 1 per row (count measure)
-- `total_premium`: Annual premium amount
-
-**Processing**:
-- Reads dimension tables from PostgreSQL
-- Performs surrogate key lookups
-- Joins cleaned data with dimensions
-- Selects final fact columns
-
-**Run Command**:
-```bash
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 04_load_facts.py
-```
-
----
-
-### 05_analyze_fact.py
-**Purpose**: Aggregate premium and policy counts by year and month
-
-**Output**: Year-Month analysis with rolling sums
-
-**Processing**:
-- Joins fact table with date dimension
-- Groups by year, month
-- Aggregates premium and policy counts
-- Orders by year and month
-
-**Run Command**:
-```bash
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 05_analyze_fact.py
-```
-
----
-
-### 06_analyze_customer.py
-**Purpose**: Aggregate premium and policies by customer segment
-
-**Output**: Customer segment analysis with premium distribution
-
-**Processing**:
-- Joins fact table with customer dimension
-- Groups by customer segment
-- Aggregates premium and policy counts
-- Orders by total premium (descending)
-
-**Run Command**:
-```bash
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 06_analyze_customer.py
-```
-
----
-
-### 07_stop_spark.py
-**Purpose**: Gracefully shut down Spark sessions
-
-**Usage**: Run after analysis to clean up resources
-
-```bash
-spark-submit --jars "path/to/postgresql-42.7.8.jar" 07_stop_spark.py
-```
+### 11_cleanup_spark_session.py
+**Gracefully stops** Spark session and releases resources.
 
 ---
 
@@ -368,96 +275,85 @@ spark-submit --jars "path/to/postgresql-42.7.8.jar" 07_stop_spark.py
 ### Dimension Tables
 
 #### dim_customer
-```sql
-customer_key VARCHAR(50) PRIMARY KEY
-first_name VARCHAR(100)
-last_name VARCHAR(100)
-age INTEGER
-gender_code VARCHAR(10)
-city_postal_code VARCHAR(15)
-customer_segment VARCHAR(50)
-load_date DATE
-```
+- **customer_key** (PK): Customer identifier
+- **first_name, last_name**: Customer names
+- **age, gender_code**: Demographics
+- **city_postal_code**: Location
+- **customer_segment**: Premium, Standard, Budget
+- **load_date**: Load timestamp
 
 #### dim_policy
-```sql
-contract_key VARCHAR(50) PRIMARY KEY
-product_type VARCHAR(50)
-risk_zone VARCHAR(50)
-sales_channel VARCHAR(50)
-contract_status VARCHAR(20)
-load_date DATE
-```
+- **policy_key** (PK): Surrogate key
+- **contract_id** (NK): Natural key (from source)
+- **product_type**: Coverage type
+- **risk_zone, sales_channel**: Policy attributes
+- **contract_status**: Active/Expired/Pending
+- **load_date**: Load timestamp
 
 #### dim_date
-```sql
-date_key INTEGER PRIMARY KEY (YYYYMMDD format)
-full_date DATE
-calendar_year INTEGER
-calendar_month INTEGER
-day_of_week INTEGER
-is_weekend BOOLEAN
-```
+- **date_key** (PK): YYYYMMDD format
+- **year, month, day_of_week**: Temporal attributes
+- **month_name, quarter**: Additional attributes
 
-### Fact Table
+### Fact Tables
 
 #### fact_policy_snapshot
-```sql
-policy_fact_id BIGSERIAL PRIMARY KEY
-customer_key VARCHAR(50) -- FK to dim_customer
-contract_key VARCHAR(50) -- FK to dim_policy
-load_date_key INTEGER -- FK to dim_date
-annual_premium DOUBLE PRECISION
-policy_count INTEGER
-load_date DATE
-```
+- **customer_key, policy_key, load_date_key**: Surrogate keys
+- **policy_count**: Always 1
+- **total_premium**: Annual premium
+
+#### fact_claims
+- **customer_key, policy_key, claim_date_key**: Surrogate keys
+- **claim_id**: Degenerate dimension
+- **claim_amount, claim_status, claim_type, liability**: Measures and attributes
+
+#### fact_driver_risk
+- **customer_key, device_id**: Driver/device identifiers
+- **risk_score**: 0-100 scale (SAFE≥80, MODERATE≥60, RISKY≥40, VERY_RISKY<40)
+- **avg_speed, max_speed, speeding_count**: Telematics metrics
 
 ---
 
 ## 🔧 Troubleshooting
 
-### Python 3.14 Compatibility Issue
+### PostgreSQL Authentication Error
+**Error**: `org.postgresql.util.PSQLException: password is an empty string`
 
-**Error**: `TypeError: 'JavaPackage' object is not callable`
-
-**Solution**: Use Python 3.12 or 3.13. PySpark 4.0.1 has compatibility issues with Python 3.14.
-
-```bash
-# Check Python version
-python --version
-
-# Switch to Python 3.12 if available
-python3.12 -m venv venv
+**Solution**: Ensure `.env` has valid DB_PASSWORD:
 ```
+DB_PASSWORD=your_actual_password
+```
+Do not leave it empty.
 
 ### JDBC Driver Not Found
-
 **Error**: `java.lang.ClassNotFoundException: org.postgresql.Driver`
 
-**Solution**: Ensure `JDBC_JAR_PATH` in `.env` points to the correct PostgreSQL JDBC driver:
-
+**Solution**: Update JDBC_JAR_PATH in `.env`:
 ```
 JDBC_JAR_PATH=C:/Program Files/PostgreSQL/18/jdbc/postgresql-42.7.8.jar
 ```
 
 ### Database Connection Refused
-
 **Error**: `org.postgresql.util.PSQLException: Connection to localhost:5432 refused`
 
 **Solution**: 
-1. Ensure PostgreSQL is running
-2. Check `.env` credentials are correct
+1. Verify PostgreSQL is running
+2. Check credentials in `.env` are correct
 3. Verify database exists: `psql -l`
 
-### File Not Found
+### Missing Data Files
+**Error**: `FileNotFoundError` or parquet file not found
 
-**Error**: `FileNotFoundError: Raw file not found`
+**Solution**: Place CSV files in `data/raw/`:
+- contracts.csv
+- vehicles.csv
+- claims.csv
+- Telematicsdata.csv
 
-**Solution**: Place CSV files in `data/raw/` directory:
-- `contracts.csv`
-- `vehicles.csv`
-- `claims.csv`
-- `Telematicsdata.csv`
+### Python Version Incompatibility
+**Error**: `TypeError: 'JavaPackage' object is not callable`
+
+**Solution**: Use Python 3.12 or 3.13 (avoid 3.14 with PySpark 4.0.1)
 
 ---
 
@@ -504,29 +400,6 @@ spark-submit --driver-memory 4g --executor-memory 4g --jars "path" script.py
 
 ---
 
-## 🤝 Contributing
-
-To improve this pipeline:
-
-1. Create a new branch for your feature
-2. Follow Python PEP 8 style guide
-3. Add comments for complex transformations
-4. Test with sample data before committing
-5. Update README if adding new features
-
----
-
-## 📝 License
-
-This project is provided as-is for educational and operational purposes.
-
----
-
-## 👤 Contact
-
-For questions or issues: Open an issue on the GitHub repository
-
----
-
-**Last Updated**: December 15, 2025  
-**Pipeline Version**: 1.0
+**Last Updated**: December 16, 2025  
+**Pipeline Version**: 1.0  
+**Status**: Production-Ready

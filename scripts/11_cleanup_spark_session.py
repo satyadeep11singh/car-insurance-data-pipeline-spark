@@ -1,3 +1,18 @@
+"""
+11_cleanup_spark_session.py - Cleanup and Resource Management
+
+Gracefully stop the Spark session and release resources.
+Run this as the final step in the pipeline or manually after all processing.
+
+Functionality:
+  - Retrieve active Spark session (if any)
+  - Stop the session cleanly
+  - Handle errors gracefully (session may already be stopped)
+
+Error handling: Catches exceptions if session not found or already stopped
+
+Dependencies: PySpark
+"""
 from pyspark.sql import SparkSession
 
 def cleanup_spark():

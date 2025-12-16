@@ -1,4 +1,24 @@
-# 04_load_facts.py
+"""
+05_load_fact_tables.py - Load Fact Tables to PostgreSQL
+
+Create and load the central fact table (fact_policy_snapshot) by joining cleaned contracts
+with dimension tables to populate surrogate keys.
+
+Join path:
+  contracts (cleaned) 
+    + dim_customer (on customer_key) → gets SK
+    + dim_policy (on contract_id → policy_key) → gets SK
+    + dim_date (on load_date) → gets load_date_key SK
+
+Fact table measures:
+  - policy_count: Count of policies (always 1 per row in this case)
+  - total_premium: Annual premium amount
+
+Output: insurance_dw.fact_policy_snapshot
+
+Dependencies: PySpark, config, PostgreSQL JDBC driver
+"""
+# 04_load_facts.py - OLD NAMING, TODO: Update to 05_load_fact_tables.py
 
 import sys
 import os

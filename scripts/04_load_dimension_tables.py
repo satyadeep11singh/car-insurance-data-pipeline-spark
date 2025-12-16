@@ -1,3 +1,22 @@
+"""
+04_load_dimension_tables.py - Load Dimension Tables to PostgreSQL
+
+Extract and load dimensional data from cleaned contracts into data warehouse:
+1. dim_customer: Customer master data (customer_key as PK)
+2. dim_policy: Policy/Contract master data (policy_key as surrogate key)
+3. dim_date: Calendar dimension (2020-01-01 to 2030-12-31 with attributes)
+
+Input: ../data/cleaned/contracts_clean.parquet
+Outputs:
+  - insurance_dw.dim_customer
+  - insurance_dw.dim_policy
+  - insurance_dw.dim_date
+
+Deduplication strategy: Drop duplicates on primary/natural keys
+JDBC mode: overwrite (initial load)
+
+Dependencies: PySpark, config, PostgreSQL JDBC driver
+"""
 import sys
 import os
 
@@ -113,7 +132,7 @@ def load_dimensions(spark):
         col("contract_status"),
         col("load_date")
     )
-    load_dimension_table(df_policy, POLICY_TABLE, ["contract_id"])
+    load_dimension_table(df_dim_policy, POLICY_TABLE, ["contract_id"])
 
     # NOTE: DIM_DATE population is a separate process, often done by generating
     # a calendar table and then loading it once. We will skip the generation script for now.
@@ -172,8 +191,3 @@ if __name__ == "__main__":
     # Stop Spark Session
     spark.stop()
     print("--- Spark Session Stopped ---")
-    print("ERROR: Please update POSTGRES_JDBC_JAR with the full path to your postgresql-*.jar file.")
-else:
-    spark = initialize_spark_session(POSTGRES_JDBC_JAR)
-    load_dimensions(spark)
-    spark.stop()

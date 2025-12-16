@@ -1,3 +1,20 @@
+"""
+01_ingest_csv_to_parquet.py - CSV Ingestion and Parquet Staging
+
+Read raw CSV files and convert them to Parquet format for efficient processing.
+This is the first step in the ETL pipeline (Extract phase).
+
+Datasets ingested:
+- contracts.csv → contracts.parquet
+- vehicles.csv → vehicles.parquet
+- claims.csv → claims.parquet
+- Telematicsdata.csv → telematics_raw.parquet
+
+Basic cleaning: removes completely empty rows
+
+Dependencies: pandas, os
+Outputs: Parquet files in ../data/staged/
+"""
 import pandas as pd
 import os
 

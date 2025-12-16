@@ -1,3 +1,18 @@
+"""
+02_clean_contracts_data.py - Contract Data Cleaning and Validation
+
+Transform and validate contracts data with schema enforcement:
+- Split full names into first/last names
+- Parse and standardize dates (handles both MM/dd/yyyy and yyyy-MM-dd)
+- Remove currency symbols and cast to numeric types
+- Rename columns for clarity in data modeling
+- Add load_date metadata
+
+Input: ../data/staged/contracts.parquet
+Output: ../data/cleaned/contracts_clean.parquet (partitioned by contract_status)
+
+Dependencies: PySpark, config
+"""
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, to_date, lit, when, regexp_replace, split, substring_index
 from pyspark.sql.types import IntegerType, DateType, DoubleType, StringType

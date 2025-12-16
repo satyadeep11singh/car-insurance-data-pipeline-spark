@@ -1,3 +1,20 @@
+"""
+09_analyze_fact_metrics.py - Analyze Fact Metrics by Temporal Dimensions
+
+Perform time-series analysis of fact_policy_snapshot aggregating premium and policies
+by year and month (load date dimension).
+
+Analysis output:
+  - Total Premium Sold (by year, month)
+  - Total Policies (by year, month)
+  - Ordered by year and month for trend analysis
+
+Join: Fact table → Date Dimension (on load_date_key)
+
+Output: Console table showing metrics by temporal aggregation
+
+Dependencies: PySpark, config
+"""
 import sys
 import os
 
